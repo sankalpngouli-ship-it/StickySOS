@@ -15,6 +15,8 @@
 
 
 <!-- QR generation: same QRCode.js approach as the supplied generator -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <!-- Camera QR scanning -->
 <script src="https://unpkg.com/html5-qrcode" defer></script>
@@ -114,10 +116,46 @@ hr{border:0;border-top:1px solid var(--border);margin:17px 0}
 .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(12px);background:var(--ink);color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;z-index:50;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media(max-width:380px){.grid{grid-template-columns:1fr}.row{flex-direction:column;gap:0}}
+
+/* StickySOS login gate */
+.auth-gate{position:fixed;inset:0;background:var(--bg);z-index:10000;display:flex;align-items:center;justify-content:center;padding:22px}
+.auth-box{width:min(430px,100%);background:var(--card);border:1px solid var(--border);border-radius:22px;padding:25px;box-shadow:var(--shadow);text-align:center}
+.auth-box h2{margin:0 0 7px}
+.auth-box>p{font-size:13px;color:var(--dim);line-height:1.5;margin:0 0 18px}
+.google-btn,.email-btn{width:100%;border:1px solid var(--border);border-radius:11px;padding:13px 15px;font-weight:700;font-size:14px;background:#fff;color:var(--ink);cursor:pointer}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px}
+.google-btn:disabled,.email-btn:disabled{opacity:.6;cursor:not-allowed}
+.email-auth{margin-top:13px;padding-top:15px;border-top:1px solid var(--border)}
+.email-auth input{margin-bottom:9px}
+.email-btn{background:var(--ink);color:#fff;border:0}
+.email-actions{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+.email-link{border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;padding:4px}
+.auth-error{display:none;margin-top:12px;padding:10px 12px;border-radius:10px;background:#fff0ec;color:#b43f32;font-size:12px;line-height:1.45;text-align:left}
+.auth-error.show{display:block}
+.user-chip{display:none;align-items:center;gap:7px;font-size:11px;color:var(--dim);max-width:180px;overflow:hidden}
+.user-chip img{width:28px;height:28px;border-radius:50%}
 </style>
 </head>
 
 <body>
+<div id="authGate" class="auth-gate">
+  <div class="auth-box">
+    <div style="font-size:42px;margin-bottom:8px">🆘</div>
+    <h2>Welcome to StickySOS</h2>
+    <p>Sign in with Google or email to access your emergency profile, QR generator, scanner and orders.</p>
+    <button id="googleSignInBtn" class="google-btn" onclick="signInWithGoogle()"><span style="font-size:18px">G</span> Continue with Google</button>
+    <div class="email-auth">
+      <input id="emailAuthEmail" type="email" autocomplete="email" placeholder="Email address">
+      <input id="emailAuthPassword" type="password" autocomplete="current-password" placeholder="Password">
+      <button id="emailSignInBtn" class="email-btn" onclick="signInWithEmail()">Sign in with Email</button>
+      <div class="email-actions">
+        <button class="email-link" onclick="createEmailAccount()">Create account</button>
+        <button class="email-link" onclick="resetEmailPassword()">Forgot password?</button>
+      </div>
+    </div>
+    <div id="authError" class="auth-error"></div>
+  </div>
+</div>
 <div class="app">
 
 <header class="topbar">
@@ -139,6 +177,7 @@ hr{border:0;border-top:1px solid var(--border);margin:17px 0}
       <p>Emergency QR & NFC profile</p>
     </div>
   </div>
+  <div class="user-chip" id="userChip"><span id="userEmail"></span></div>
   <button class="icon-btn" onclick="showScreen('profile')" aria-label="Profile">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 20c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>
   </button>
@@ -265,6 +304,7 @@ hr{border:0;border-top:1px solid var(--border);margin:17px 0}
   <div class="card" id="profileCard"></div>
   <button class="btn secondary full mt" onclick="showScreen('create')">Edit profile</button>
   <button class="btn secondary full mt" onclick="clearProfile()">Clear saved profile</button>
+  <button class="btn dark full mt" onclick="signOutStickySOS()">Sign out</button>
 </section>
 
 </div>
@@ -281,6 +321,44 @@ hr{border:0;border-top:1px solid var(--border);margin:17px 0}
 <div class="toast" id="toast"></div>
 
 <script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB3X61CZP_cmOUKfe1ANwwDNYuldnw4wXQ",
+  authDomain: "stickysos.firebaseapp.com",
+  projectId: "stickysos",
+  storageBucket: "stickysos.firebasestorage.app",
+  messagingSenderId: "843630405023",
+  appId: "1:843630405023:web:587fd85db53071c9eac9aa",
+  measurementId: "G-JS5CNV174Q"
+};
+let firebaseReady=false;
+function showAuthError(msg){const e=document.getElementById('authError');e.textContent=msg;e.classList.add('show')}
+function setAuthGate(show){document.getElementById('authGate').style.display=show?'flex':'none'}
+async function signInWithGoogle(){
+ const b=document.getElementById('googleSignInBtn');b.disabled=true;document.getElementById('authError').classList.remove('show');
+ try{const provider=new firebase.auth.GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});await firebase.auth().signInWithPopup(provider)}
+ catch(e){console.error('Google sign-in failed:',e);let m='Google sign-in failed: '+(e.code||'unknown')+(e.message?' — '+e.message:'');showAuthError(m)}
+ finally{b.disabled=false}
+}
+async function signInWithEmail(){
+ const email=document.getElementById('emailAuthEmail').value.trim(),password=document.getElementById('emailAuthPassword').value,b=document.getElementById('emailSignInBtn');
+ document.getElementById('authError').classList.remove('show');if(!email||!password){showAuthError('Enter your email and password.');return}b.disabled=true;
+ try{await firebase.auth().signInWithEmailAndPassword(email,password)}catch(e){console.error(e);showAuthError('Email sign-in failed: '+(e.code||'unknown')+(e.message?' — '+e.message:''))}finally{b.disabled=false}
+}
+async function createEmailAccount(){
+ const email=document.getElementById('emailAuthEmail').value.trim(),password=document.getElementById('emailAuthPassword').value;document.getElementById('authError').classList.remove('show');
+ if(!email||!password){showAuthError('Enter an email and password first.');return}if(password.length<6){showAuthError('Password must be at least 6 characters.');return}
+ try{await firebase.auth().createUserWithEmailAndPassword(email,password)}catch(e){console.error(e);showAuthError('Account creation failed: '+(e.code||'unknown')+(e.message?' — '+e.message:''))}
+}
+async function resetEmailPassword(){
+ const email=document.getElementById('emailAuthEmail').value.trim();if(!email){showAuthError('Enter your email address first.');return}
+ try{await firebase.auth().sendPasswordResetEmail(email);showAuthError('Password reset email sent. Check your inbox.')}catch(e){showAuthError('Reset failed: '+(e.code||'unknown')+(e.message?' — '+e.message:''))}
+}
+function signOutStickySOS(){firebase.auth().signOut()}
+function initStickySOSAuth(){
+ try{if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);firebaseReady=true;firebase.auth().onAuthStateChanged(user=>{setAuthGate(!user);const chip=document.getElementById('userChip');if(chip)chip.style.display=user?'flex':'none';const em=document.getElementById('userEmail');if(em)em.textContent=user?.email||''})}
+ catch(e){console.error(e);setAuthGate(true);showAuthError('Firebase could not initialize: '+e.message)}
+}
+
 const LS='stickysos_profile_v1';
 let currentQR=null;
 let currentLink='';
@@ -601,6 +679,7 @@ function loadFromHash(){
 }
 
 window.addEventListener('load',()=>{
+  initStickySOSAuth();
   loadProfileIntoForm();
   renderHome();
   renderProfile();
