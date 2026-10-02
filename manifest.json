@@ -1,0 +1,48 @@
+{
+  "name": "StickySOS \u2014 QR & Emergency Profile",
+  "short_name": "StickySOS",
+  "description": "Create and scan StickySOS emergency contact QR profiles.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f1ea",
+  "theme_color": "#f4f1ea",
+  "lang": "en",
+  "categories": [
+    "health",
+    "lifestyle",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Create QR",
+      "short_name": "Create QR",
+      "url": "./index.html#create"
+    },
+    {
+      "name": "Scan SOS",
+      "short_name": "Scan SOS",
+      "url": "./index.html#scan"
+    },
+    {
+      "name": "Orders",
+      "short_name": "Orders",
+      "url": "./index.html#orders"
+    }
+  ]
+}
